@@ -97,7 +97,7 @@ class Config:
     
     # ⏰ HORARIOS
     HORA_APERTURA = dtime(10, 25)
-    HORA_CIERRE = dtime(17, 5)
+    HORA_CIERRE = dtime(17, 35)
     
     # Defaults
     DEFAULT_TNA: float = 25.0
@@ -690,11 +690,23 @@ class BotHandlers:
 class ServicioCauciones:
     def __init__(self, s, c, h, a, l):
         self.s=s; self.c=c; self.h=h; self.a=a; self.l=l
+        self._ultimo_dato = []
+
+    def _es_horario_mercado(self):
+        tz = pytz.timezone('America/Argentina/Buenos_Aires')
+        ahora = datetime.now(tz)
+        if ahora.weekday() > 4: return False
+        return Config.HORA_APERTURA <= ahora.time() <= Config.HORA_CIERRE
+
     def obtener_datos(self):
+        if not self._es_horario_mercado():
+            return self._ultimo_dato
         d = self.c.get()
         if d: return d
         d = self.s.obtener_datos()
-        if d: self.c.set(d); self.h.agregar_punto(d)
+        if d:
+            self.c.set(d); self.h.agregar_punto(d)
+            self._ultimo_dato = d
         return d
     def analizar(self, obj): return self.a.analizar(self.obtener_datos(), obj)
     def get_historial(self): return self.h.obtener_historial()
@@ -709,11 +721,15 @@ def main():
     async def post_init(app):
         await app.bot.set_my_commands([
             BotCommand("start", "Inicio"),
+            BotCommand("donar", "☕ Apoyar al Bot"),
             BotCommand("ahora", "Ver Manual"),
             BotCommand("tendencia", "Gráfico General"),
             BotCommand("mitendencia", "Gráfico Custom"),
             BotCommand("top3", "Activar/Desactivar Top 3"),
-            BotCommand("donar", "☕ Apoyar al Bot"),
+            BotCommand("set", "Cambiar TNA objetivo"),
+            BotCommand("tiempo", "Cambiar frecuencia (min)"),
+            BotCommand("variacion", "Cambiar anti-spam"),
+            BotCommand("set_tendencia", "Cambiar días del gráfico"),
             BotCommand("usuarios", "ADMIN: Lista Detallada"),
             BotCommand("stats", "ADMIN: Resumen"),
             BotCommand("gen", "ADMIN: Generar Token"),
