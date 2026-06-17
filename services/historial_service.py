@@ -74,8 +74,10 @@ class HistorialService:
         if not mapa:
             return
 
-        tasa_representativa = max(mapa.values())
         hoy = ahora.date()
+        # Tasa representativa del snapshot (1 día, o 3 días si es viernes)
+        dias_objetivo = 3 if hoy.weekday() == 4 else 1
+        tasa_representativa = mapa.get(dias_objetivo, 0.0)
 
         # 1. Actualizar historial de gráficos (cappado)
         self._historial.append(PuntoHistorial(ahora, mapa))
@@ -83,9 +85,10 @@ class HistorialService:
             self._historial.pop(0)
 
         # 2. Actualizar acumulador del día (no cappado, memoria constante)
-        if hoy not in self._acumuladores:
-            self._acumuladores[hoy] = _AcumuladorDia(fecha=hoy)
-        self._acumuladores[hoy].registrar(tasa_representativa, ahora)
+        if tasa_representativa > 0:
+            if hoy not in self._acumuladores:
+                self._acumuladores[hoy] = _AcumuladorDia(fecha=hoy)
+            self._acumuladores[hoy].registrar(tasa_representativa, ahora)
 
         # Limpiar acumuladores viejos: guardar solo los últimos 2 días
         # (hoy + ayer). Evita que crezca indefinidamente si el servidor
