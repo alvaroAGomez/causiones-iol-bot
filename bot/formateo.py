@@ -23,7 +23,7 @@ class Formateador:
             return " ⬆️"
         if diferencia < -0.01:
             return " ⬇️"
-        return ""
+        return " ➖ "
 
     @staticmethod
     def reporte(
@@ -37,22 +37,25 @@ class Formateador:
         if analisis.hay_alerta_critica:
             msgs.append(
                 f"🚨🚨 *¡OPORTUNIDAD EXTRAORDINARIA!* 🚨🚨\n"
-                f"*TASA > 100% DETECTADA: {analisis.tasa_maxima}%* \n\n"
+                f"*TASA > 100% DETECTADA: {analisis.tasa_maxima}%* 🚀\n\n"
             )
 
         if mostrar_top3:
-            msg = "*🏆 Top 3 Mercado:*\n\n"
+            msg = "🏆 *Top 3 Mejores Tasas del Mercado:*\n"
             for i in analisis.top_3:
                 flecha = Formateador._calcular_flecha(i.tasa, i.dias, memoria_detallada)
-                msg += f"✅ {i.dias} DÍAS | {i.tasa}%{flecha}\n"
+                msg += f"  🟢 `{i.dias:02d} DÍAS` ➡️ *{i.tasa}%*{flecha}\n"
             msgs.append(msg)
 
         if analisis.oportunidades:
-            msg = f"\n🔔 *Oportunidades > ({objetivo}%):*\n\n"
+            msg = f"\n🔔 *Oportunidades (superan tu objetivo del {objetivo}%):*\n"
             for i in analisis.oportunidades[:5]:
                 flecha = Formateador._calcular_flecha(i.tasa, i.dias, memoria_detallada)
-                msg += f"✅ {i.dias} DÍAS | {i.tasa}%{flecha}\n"
+                msg += f"  🔥 `{i.dias:02d} DÍAS` ➡️ *{i.tasa}%*{flecha}\n"
             msgs.append(msg)
+
+        if not msgs:
+            return ""
 
         return "\n".join(msgs)
 
