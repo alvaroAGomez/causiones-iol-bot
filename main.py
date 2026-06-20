@@ -8,7 +8,7 @@ import asyncio
 import logging
 
 import uvicorn
-from telegram import BotCommand
+from telegram import BotCommand, BotCommandScopeAllPrivateChats, BotCommandScopeDefault, BotCommandScopeChat
 from telegram.ext import (
     ApplicationBuilder,
     CallbackQueryHandler,
@@ -23,11 +23,11 @@ from api.app import crear_api
 from bot.formateo import Formateador
 from bot.handlers import (
     BotHandlers,
-    ESPERANDO_CODIGO,
-    ESPERANDO_TASA,
-    ESPERANDO_TIEMPO,
-    ESPERANDO_VARIACION,
-    ESPERANDO_DIAS_GRAFICO,
+    MENU_TNA,
+    MENU_TIEMPO,
+    MENU_VAR,
+    MENU_DIAS,
+    SELECCIONANDO,
 )
 from config import Config
 from models.models import ConfiguracionUsuario
@@ -69,22 +69,52 @@ def construir_bot(svc: ServicioCauciones):
     h = BotHandlers(svc, fmt)
 
     async def post_init(app):
-        await app.bot.set_my_commands([
+        # Por defecto el bot arranca abierto (sin requerir aprobación)
+        #app.bot_data.setdefault('bot_abierto', True) #solo para pruebas
+
+        # Comandos públicos (para todos)
+        cmds_publicos = [
             BotCommand("start", "Inicio"),
+            BotCommand("menu", "⚙️ Configuración"),
+            BotCommand("ahora", "🔎 Ver Tasas Actuales"),
+            BotCommand("tendencia", "📈 Gráfico General"),
+            BotCommand("mitendencia", "📊 Gráfico Personalizado"),
+            BotCommand("ayuda", "📖 Guía de uso"),
             BotCommand("donar", "☕ Apoyar al Bot"),
-            BotCommand("ahora", "Ver Manual"),
-            BotCommand("tendencia", "Gráfico General"),
-            BotCommand("mitendencia", "Gráfico Custom"),
-            BotCommand("top3", "Activar/Desactivar Top 3"),
-            BotCommand("set", "Cambiar TNA objetivo"),
-            BotCommand("tiempo", "Cambiar frecuencia (min)"),
-            BotCommand("variacion", "Cambiar anti-spam"),
-            BotCommand("set_tendencia", "Cambiar días del gráfico"),
-            BotCommand("usuarios", "ADMIN: Lista Detallada"),
-            BotCommand("stats", "ADMIN: Resumen"),
-            BotCommand("gen", "ADMIN: Generar Token"),
-            BotCommand("tokens", "ADMIN: Ver Tokens"),
-        ])
+            BotCommand("stop", "🛑 Detener alertas"),
+        ]
+
+        try:
+            # Limpiar comandos residuales de todos los scopes
+            await app.bot.delete_my_commands(scope=BotCommandScopeDefault())
+            await app.bot.delete_my_commands(scope=BotCommandScopeAllPrivateChats())
+
+            # Si hay admin configurado, limpiar también su scope de chat específico
+            if Config.ID_ADMIN:
+                try:
+                    await app.bot.delete_my_commands(scope=BotCommandScopeChat(chat_id=Config.ID_ADMIN))
+                except Exception:
+                    pass
+
+            # Setear comandos públicos para todos los usuarios
+            await app.bot.set_my_commands(cmds_publicos, scope=BotCommandScopeDefault())
+            await app.bot.set_my_commands(cmds_publicos, scope=BotCommandScopeAllPrivateChats())
+            logger.info(f"[COMANDOS] Comandos públicos seteados ({len(cmds_publicos)} cmds)")
+
+            # Comandos para el Administrador (solo si está configurado)
+            if Config.ID_ADMIN:
+                cmds_admin = cmds_publicos + [
+                    BotCommand("modo", "ADMIN: Público/Privado"),
+                    BotCommand("pendientes", "ADMIN: Aprobar Usuarios"),
+                    BotCommand("usuarios", "ADMIN: Lista de Usuarios"),
+                    BotCommand("stats", "ADMIN: Estadísticas"),
+                ]
+                await app.bot.set_my_commands(cmds_admin, scope=BotCommandScopeChat(chat_id=Config.ID_ADMIN))
+                logger.info(f"[COMANDOS] Comandos admin seteados para chat {Config.ID_ADMIN}")
+            else:
+                logger.info("[COMANDOS] Sin ID_ADMIN - solo comandos públicos")
+        except Exception as e:
+            logger.error(f"[COMANDOS] Error seteando comandos: {e}")
 
         # Restaurar jobs de usuarios persistidos
         if app.user_data:
@@ -128,36 +158,39 @@ def construir_bot(svc: ServicioCauciones):
         .build()
     )
 
-    # ConversationHandler
-    conv_start = ConversationHandler(
-        entry_points=[CommandHandler('start', h.start_wizard_init)],
+    # ConversationHandler para el MENU
+    conv_menu = ConversationHandler(
+        entry_points=[
+            CommandHandler('menu', h.cmd_menu),
+            CallbackQueryHandler(h.callback_menu, pattern='^menu_')
+        ],
         states={
-            ESPERANDO_CODIGO: [MessageHandler(filters.TEXT & ~filters.COMMAND, h.wizard_check_code)],
-            ESPERANDO_TASA: [MessageHandler(filters.TEXT & ~filters.COMMAND, h.start_wizard_tasa)],
-            ESPERANDO_TIEMPO: [MessageHandler(filters.TEXT & ~filters.COMMAND, h.start_wizard_tiempo)],
-            ESPERANDO_VARIACION: [MessageHandler(filters.TEXT & ~filters.COMMAND, h.start_wizard_variacion)],
-            ESPERANDO_DIAS_GRAFICO: [MessageHandler(filters.TEXT & ~filters.COMMAND, h.start_wizard_final)],
+            SELECCIONANDO: [CallbackQueryHandler(h.callback_menu, pattern='^menu_')],
+            MENU_TNA: [MessageHandler(filters.TEXT & ~filters.COMMAND, h.input_tna)],
+            MENU_TIEMPO: [MessageHandler(filters.TEXT & ~filters.COMMAND, h.input_tiempo)],
+            MENU_VAR: [MessageHandler(filters.TEXT & ~filters.COMMAND, h.input_var)],
+            MENU_DIAS: [MessageHandler(filters.TEXT & ~filters.COMMAND, h.input_dias)],
         },
-        fallbacks=[CommandHandler('cancel', h.wizard_cancel)],
+        fallbacks=[CommandHandler('cancel', h.menu_cancel), CommandHandler('menu', h.cmd_menu)],
     )
 
     # Orden de prioridad de handlers
+    app.add_handler(CommandHandler("start", h.cmd_start))
+    app.add_handler(conv_menu)
+    app.add_handler(CallbackQueryHandler(h.callback_admin_acciones, pattern='^admin_'))
     app.add_handler(CallbackQueryHandler(h.callback_donaciones, pattern='^donar_'))
+    
     app.add_handler(CommandHandler("donar", h.cmd_donar))
     app.add_handler(CommandHandler("usuarios", h.cmd_usuarios))
     app.add_handler(CommandHandler("stats", h.cmd_stats))
-    app.add_handler(CommandHandler("gen", h.cmd_generar_token))
-    app.add_handler(CommandHandler("tokens", h.cmd_listar_tokens))
-    app.add_handler(CommandHandler("set", h.cmd_set_tna))
-    app.add_handler(CommandHandler("tiempo", h.cmd_set_tiempo))
-    app.add_handler(CommandHandler("variacion", h.cmd_set_variacion))
-    app.add_handler(CommandHandler("set_tendencia", h.cmd_set_dias))
-    app.add_handler(CommandHandler("top3", h.cmd_toggle_top3))
+    app.add_handler(CommandHandler("modo", h.cmd_modo))
+    app.add_handler(CommandHandler("pendientes", h.cmd_pendientes))
+    
+    app.add_handler(CommandHandler("ayuda", h.cmd_ayuda))
     app.add_handler(CommandHandler("ahora", h.cmd_ahora))
     app.add_handler(CommandHandler("tendencia", h.cmd_tendencia_gral))
     app.add_handler(CommandHandler("mitendencia", h.cmd_tendencia_cust))
     app.add_handler(CommandHandler("stop", h.cmd_stop))
-    app.add_handler(conv_start)
 
     app.job_queue.run_repeating(h.recoleccion_global, interval=Config.GLOBAL_SCRAPE_INTERVAL, first=10)
 
@@ -165,25 +198,23 @@ def construir_bot(svc: ServicioCauciones):
 
 
 async def _run_api(svc: ServicioCauciones):
-    """Corre uvicorn en modo programático dentro del event loop existente."""
     fast_app = crear_api(svc)
     config = uvicorn.Config(
         fast_app,
         host=Config.API_HOST,
         port=Config.API_PORT,
         log_level="info",
-        loop="none",   # ← le decimos que NO cree su propio loop
+        loop="none",
     )
     server = uvicorn.Server(config)
     await server.serve()
 
 
 async def _run_bot(telegram_app):
-    """Corre el bot de Telegram en modo programático."""
     await telegram_app.initialize()
+    await telegram_app.post_init(telegram_app)
     await telegram_app.start()
     await telegram_app.updater.start_polling()
-    # Espera indefinida hasta que uvicorn pare (o Ctrl+C)
     await asyncio.Event().wait()
 
 
@@ -194,7 +225,6 @@ async def main():
     logger.info(f"🌐 API arrancando en http://{Config.API_HOST}:{Config.API_PORT}")
     logger.info("🤖 Bot Telegram arrancando...")
 
-    # Ambos corren concurrentemente en el MISMO event loop
     await asyncio.gather(
         _run_api(svc),
         _run_bot(telegram_app),
