@@ -202,6 +202,18 @@ X-API-Key: <tu_clave>
 
 ---
 
+## Pruebas automatizadas
+
+Con las dependencias de `requirements.txt` instaladas, ejecutá desde la raíz:
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+Las pruebas usan respuestas simuladas de IOL y Telegram, un reloj controlado y la API en memoria. No requieren credenciales reales.
+
+---
+
 ## 📋 Notas
 
 - El archivo `.env` está excluido de git por seguridad.
