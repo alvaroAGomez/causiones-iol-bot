@@ -30,9 +30,9 @@ class BotHandlers:
     def _es_horario_mercado(self) -> bool:
         tz = pytz.timezone('America/Argentina/Buenos_Aires')
         ahora = datetime.now(tz)
-        if ahora.weekday() > 4:
+        if ahora.weekday() > 4 or ahora.date() in Config.DIAS_SIN_CAUCIONES:
             return False
-        return Config.HORA_APERTURA <= ahora.time() <= Config.HORA_CIERRE
+        return Config.HORA_APERTURA <= ahora.time() < Config.HORA_CIERRE
 
     def _es_admin(self, user_id: int) -> bool:
         return user_id == Config.ID_ADMIN
@@ -528,12 +528,9 @@ class BotHandlers:
                 msg = self.fmt.reporte(res, config.tna_objetivo, config.memoria_tasas_detallada, config.mostrar_top3)
                 if not msg.strip():
                     return
-                sent_msg = await context.bot.send_message(job.chat_id, msg, parse_mode='Markdown')
-                if res.hay_alerta_critica:
-                    try:
-                        await context.bot.pin_chat_message(job.chat_id, sent_msg.message_id)
-                    except:
-                        pass
+                if not self._es_horario_mercado():
+                    return
+                await context.bot.send_message(job.chat_id, msg, parse_mode='Markdown')
                 config.ultima_tasa_notificada_max = mejor_tasa
                 nueva_memoria = config.memoria_tasas_detallada.copy()
                 for item in res.top_3 + res.oportunidades:
@@ -564,11 +561,9 @@ class BotHandlers:
                                 try:
                                     msg = self.fmt.reporte(res_nuclear, cfg.tna_objetivo, cfg.memoria_tasas_detallada, cfg.mostrar_top3)
                                     if msg.strip():
-                                        sent_msg = await context.bot.send_message(uid, msg, parse_mode='Markdown')
-                                        try:
-                                            await context.bot.pin_chat_message(uid, sent_msg.message_id)
-                                        except:
-                                            pass
+                                        if not self._es_horario_mercado():
+                                            return
+                                        await context.bot.send_message(uid, msg, parse_mode='Markdown')
                                         cfg.ultima_tasa_notificada_max = max_tasa
                                         nueva_memoria = cfg.memoria_tasas_detallada.copy()
                                         for item in res_nuclear.top_3 + res_nuclear.oportunidades:

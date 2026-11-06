@@ -57,9 +57,9 @@ class ServicioCauciones:
     def _es_horario_mercado(self) -> bool:
         tz = pytz.timezone('America/Argentina/Buenos_Aires')
         ahora = datetime.now(tz)
-        if ahora.weekday() > 4:
+        if ahora.weekday() > 4 or ahora.date() in Config.DIAS_SIN_CAUCIONES:
             return False
-        return Config.HORA_APERTURA <= ahora.time() <= Config.HORA_CIERRE
+        return Config.HORA_APERTURA <= ahora.time() < Config.HORA_CIERRE
 
     def obtener_datos(self) -> List[DatosCaucion]:
         if not self._es_horario_mercado():

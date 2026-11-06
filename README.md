@@ -18,7 +18,7 @@ También expone una API HTTP (FastAPI) con las estadísticas del día para integ
   - Activar/desactivar Top 3 mejores tasas en las alertas.
 - **Gráficos de tendencia** general y personalizado.
 - **Top 3** mejores tasas del momento incluidas en las alertas.
-- **Alertas críticas** (tasas extremas) con mensaje pinneado automáticamente.
+- **Alertas críticas** (tasas extremas) enviadas por Telegram.
 
 ### Para el administrador
 - Modo **Abierto/Cerrado**: controla si los nuevos usuarios se aprueban automáticamente o requieren autorización manual.
@@ -206,6 +206,6 @@ X-API-Key: <tu_clave>
 
 - El archivo `.env` está excluido de git por seguridad.
 - `bot_datos.pickle` (persistencia de usuarios) también se ignora en git.
-- El bot opera en horario de mercado argentino (lunes a viernes, horario bursátil).
+- El bot monitorea de lunes a viernes, de 10:25 hasta antes de las 17:00 (hora argentina). Actualizá `Config.DIAS_SIN_CAUCIONES` en `config.py` con las jornadas sin cauciones del [calendario de BYMA](https://www.byma.com.ar/mercado/calendario-bursatil).
 - Los datos se scrapean periódicamente y se mantienen en caché para optimizar rendimiento.
 - El archivo `Causiones-IOL-Bot.py` es una versión legacy monolítica; el entrypoint recomendado es `main.py`.

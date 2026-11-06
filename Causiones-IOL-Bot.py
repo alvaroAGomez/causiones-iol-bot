@@ -22,7 +22,7 @@ import random
 import secrets
 import string
 from dataclasses import dataclass, field
-from datetime import datetime, time as dtime
+from datetime import datetime
 from collections import Counter
 from io import BytesIO, StringIO
 from typing import List, Optional, Dict, Tuple, Set
@@ -53,6 +53,8 @@ from telegram.ext import (
     CallbackQueryHandler, 
     Application
 )
+
+from config import Config as ConfigMercado
 
 matplotlib.use('Agg')
 
@@ -96,8 +98,9 @@ class Config:
     PERSISTENCE_FILE: str = 'bot_datos.pickle'
     
     # ⏰ HORARIOS
-    HORA_APERTURA = dtime(10, 25)
-    HORA_CIERRE = dtime(17, 35)
+    HORA_APERTURA = ConfigMercado.HORA_APERTURA
+    HORA_CIERRE = ConfigMercado.HORA_CIERRE
+    DIAS_SIN_CAUCIONES = ConfigMercado.DIAS_SIN_CAUCIONES
     
     # Defaults
     DEFAULT_TNA: float = 25.0
@@ -186,8 +189,8 @@ class HistorialService:
             if len(self._historial) > Config.MAX_HISTORY_POINTS: self._historial.pop(0)
 
     def _es_horario_mercado(self, ahora):
-        if ahora.weekday() > 4: return False 
-        return Config.HORA_APERTURA <= ahora.time() <= Config.HORA_CIERRE
+        if ahora.weekday() > 4 or ahora.date() in Config.DIAS_SIN_CAUCIONES: return False
+        return Config.HORA_APERTURA <= ahora.time() < Config.HORA_CIERRE
 
     def obtener_historial(self): return self._historial.copy()
     def tiene_datos(self): return len(self._historial) >= 2
@@ -316,8 +319,8 @@ class BotHandlers:
     def _es_horario_mercado(self) -> bool:
         tz = pytz.timezone('America/Argentina/Buenos_Aires')
         ahora = datetime.now(tz)
-        if ahora.weekday() > 4: return False
-        return Config.HORA_APERTURA <= ahora.time() <= Config.HORA_CIERRE
+        if ahora.weekday() > 4 or ahora.date() in Config.DIAS_SIN_CAUCIONES: return False
+        return Config.HORA_APERTURA <= ahora.time() < Config.HORA_CIERRE
 
     def _esta_autorizado(self, user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
         if self._es_admin(user_id): return True
@@ -553,10 +556,9 @@ class BotHandlers:
             try:
                 msg = self.fmt.reporte(res, config.tna_objetivo, config.memoria_tasas_detallada, config.mostrar_top3)
                 if not msg.strip(): return
-                sent_msg = await context.bot.send_message(job.chat_id, msg, parse_mode='Markdown')
-                if res.hay_alerta_critica: 
-                    try: await context.bot.pin_chat_message(job.chat_id, sent_msg.message_id)
-                    except: pass
+                if not self._es_horario_mercado():
+                    return
+                await context.bot.send_message(job.chat_id, msg, parse_mode='Markdown')
                 config.ultima_tasa_notificada_max = mejor_tasa
                 nueva_memoria = config.memoria_tasas_detallada.copy()
                 for item in res.top_3 + res.oportunidades: nueva_memoria[item.dias] = item.tasa
@@ -585,9 +587,9 @@ class BotHandlers:
                                 try:
                                     msg = self.fmt.reporte(res_nuclear, cfg.tna_objetivo, cfg.memoria_tasas_detallada, cfg.mostrar_top3)
                                     if msg.strip():
-                                        sent_msg = await context.bot.send_message(uid, msg, parse_mode='Markdown')
-                                        try: await context.bot.pin_chat_message(uid, sent_msg.message_id)
-                                        except: pass
+                                        if not self._es_horario_mercado():
+                                            return
+                                        await context.bot.send_message(uid, msg, parse_mode='Markdown')
                                         cfg.ultima_tasa_notificada_max = max_tasa
                                         nueva_memoria = cfg.memoria_tasas_detallada.copy()
                                         for item in res_nuclear.top_3 + res_nuclear.oportunidades: 
@@ -695,8 +697,8 @@ class ServicioCauciones:
     def _es_horario_mercado(self):
         tz = pytz.timezone('America/Argentina/Buenos_Aires')
         ahora = datetime.now(tz)
-        if ahora.weekday() > 4: return False
-        return Config.HORA_APERTURA <= ahora.time() <= Config.HORA_CIERRE
+        if ahora.weekday() > 4 or ahora.date() in Config.DIAS_SIN_CAUCIONES: return False
+        return Config.HORA_APERTURA <= ahora.time() < Config.HORA_CIERRE
 
     def obtener_datos(self):
         if not self._es_horario_mercado():
