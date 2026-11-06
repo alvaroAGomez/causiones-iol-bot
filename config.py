@@ -1,7 +1,7 @@
 import os
 import logging
 import sys
-from datetime import time as dtime
+from datetime import date, time as dtime
 
 sys.stdout.reconfigure(encoding='utf-8')
 
@@ -43,7 +43,19 @@ class Config:
 
     # --- HORARIOS ---
     HORA_APERTURA = dtime(10, 25)
-    HORA_CIERRE = dtime(17, 35)
+    HORA_CIERRE = dtime(17, 0)
+    # Jornadas restantes de 2026 sin rueda de cauciones según el calendario BYMA.
+    DIAS_SIN_CAUCIONES = {
+        date(2026, 11, 6),
+        date(2026, 11, 9),
+        date(2026, 11, 10),
+        date(2026, 11, 23),
+        date(2026, 12, 7),
+        date(2026, 12, 8),
+        date(2026, 12, 24),
+        date(2026, 12, 25),
+        date(2026, 12, 31),
+    }
 
     # --- DEFAULTS ---
     DEFAULT_TNA: float = 25.0

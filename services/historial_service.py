@@ -98,9 +98,9 @@ class HistorialService:
             del self._acumuladores[f]
 
     def _es_horario_mercado(self, ahora: datetime) -> bool:
-        if ahora.weekday() > 4:
+        if ahora.weekday() > 4 or ahora.date() in Config.DIAS_SIN_CAUCIONES:
             return False
-        return Config.HORA_APERTURA <= ahora.time() <= Config.HORA_CIERRE
+        return Config.HORA_APERTURA <= ahora.time() < Config.HORA_CIERRE
 
     def obtener_historial(self) -> List[PuntoHistorial]:
         return self._historial.copy()
