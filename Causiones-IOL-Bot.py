@@ -14,6 +14,7 @@ DONAR_MP_LINK=...
 """
 
 import logging
+import re
 import os
 import sys
 import time
@@ -209,7 +210,8 @@ class ScraperIOLWeb:
             for _, row in df.iterrows():
                 try:
                     t = float(str(row['tasa tomadora']).replace('%','').replace('.','').replace(',','.').strip())
-                    d = int(float(str(row['plazo']).lower().replace('días','').replace('d','').strip()))
+                    plazo = re.sub(r"\s*d(?:[íi]as?)?$", "", str(row['plazo']).strip().lower())
+                    d = int(float(plazo))
                     if t > 0: res.append(DatosCaucion(d, t))
                 except: continue
             return res

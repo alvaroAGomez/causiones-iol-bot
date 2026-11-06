@@ -44,6 +44,18 @@ class ScraperTests(unittest.TestCase):
         self.assertEqual(get.call_args.args, (scraper.url,))
         get.return_value.raise_for_status.assert_called_once()
 
+    @patch("services.scraper_iol.requests.get")
+    def test_acepta_plazo_numerico_y_sufijos_de_dias(self, get):
+        for plazo, dias in (("1", 1), ("1 día", 1), ("1 DIA", 1),
+                            ("7 días", 7), ("7 dias", 7), ("7d", 7)):
+            with self.subTest(plazo=plazo):
+                get.return_value.text = (
+                    "<table><tr><th>Plazo</th><th>Tasa Tomadora</th></tr>"
+                    f"<tr><td>{plazo}</td><td>25,50 %</td></tr></table>"
+                )
+                scraper = ScraperIOLWeb("https://iol.example")
+                self.assertEqual(scraper.obtener_datos(), [DatosCaucion(dias, 25.5)])
+
     @patch("services.scraper_iol.requests.get", side_effect=requests.Timeout)
     def test_timeout_devuelve_lista_vacia(self, get):
         with self.assertLogs("services.scraper_iol", level="ERROR"):
